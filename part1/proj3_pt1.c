@@ -5,6 +5,11 @@
 #include <linux/sched.h>
 #include <linux/mm_types.h>
 
+#include <linux/kernel_stat.h>
+#include <linux/mm.h>
+#include <linux/sched/mm.h>
+#include <linux/sched/signal.h>
+
 /*
  * takes in int as a parameter for the module
  * e.g. "insmod ./proj3_pt1.ko mypid=99"
@@ -12,8 +17,9 @@
 static int  mypid = 0;
 module_param(mypid,int, 0);
 
+
 struct task_struct *task;
-struct mm_struct *mm;
+//struct mm_struct *mm;
 struct vm_area_struct *vma;
 
 /*
@@ -42,25 +48,25 @@ static int proj3_pt1_init(void){
 	}
 
 	found:
-		vma = &task->mm->mmap;
+		vma = task->mm->mmap;
 		while(vma){
 			for(_i = vma->vm_start; _i <= vma->vm_end; _i++){
-				pdg = pdg_offset(task->mm, _i);
-				p4d = p4d_offset(pdg, _i);
+				pgd = pgd_offset(task->mm, _i);
+				p4d = p4d_offset(pgd, _i);
 				pud - pud_offset(p4d, _i);
 				pmd = pmd_offset(pud, _i);
 				pte = pte_offset_map(pmd, _i);
 				
-				down_read(task->mm->mmap->sem);
+				down_read(&task->mm->mmap_sem);
 
-				if(pte_present(pted)){
+				if(pte_present(*pte)){
 					present_pages++;		
 				}
 				else{
 					swapped_pages++;
 				}
 
-				up_read(task->mm->mmap->sem);
+				up_read(&task->mm->mmap_sem);
 			}
 			vma = vma->vm_next;
 		}
@@ -73,7 +79,7 @@ static void proj3_pt1_exit(void){
 }
 
 module_init(proj3_pt1_init);
-module_exit(proj3_pt_exit);
+module_exit(proj3_pt1_exit);
 
 
 

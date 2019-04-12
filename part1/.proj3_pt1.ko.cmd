@@ -1,0 +1,1 @@
+cmd_/home/androiski/proj3/part1/proj3_pt1.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/androiski/proj3/part1/proj3_pt1.ko /home/androiski/proj3/part1/proj3_pt1.o /home/androiski/proj3/part1/proj3_pt1.mod.o ;  true
