@@ -53,7 +53,7 @@ static int proj3_pt1_init(void){
 			for(_i = vma->vm_start; _i <= vma->vm_end; _i++){
 				pgd = pgd_offset(task->mm, _i);
 				p4d = p4d_offset(pgd, _i);
-				pud - pud_offset(p4d, _i);
+				pud = pud_offset(p4d, _i);
 				pmd = pmd_offset(pud, _i);
 				pte = pte_offset_map(pmd, _i);
 				
