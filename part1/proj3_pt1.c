@@ -20,7 +20,7 @@ module_param(mypid,int, 0);
 
 struct task_struct *task;
 //struct mm_struct *mm;
-struct vm_area_struct *vma;
+struct vm_area_struct *vma, *vma_0;
 
 /*
  * 5-layer page table goes PGD->P4D->PUD->PMD->PTE
@@ -39,7 +39,7 @@ int swapped_pages = 0;//number of pages swapped out
 
 static int proj3_pt1_init(void){
 	
-	printk(KERN_WARNING "pid= %d", mypid);//prints out the first line of the module and shows the given PID which was the parameter
+	printk("pid= %d", mypid);//prints out the first line of the module and shows the given PID which was the parameter
 
 	for_each_process(task){//looks for processes with task struct and matching PID
 		if(task->pid == mypid){
@@ -49,8 +49,9 @@ static int proj3_pt1_init(void){
 
 	found:
 		vma = task->mm->mmap;
+		vma_0 = vma;
 		while(vma){
-			for(_i = vma->vm_start; _i <= vma->vm_end; _i++){
+			for(_i = vma->vm_start; _i < vma->vm_end;_i+= PAGE_SIZE){
 				pgd = pgd_offset(task->mm, _i);
 				p4d = p4d_offset(pgd, _i);
 				pud = pud_offset(p4d, _i);
@@ -59,18 +60,22 @@ static int proj3_pt1_init(void){
 				
 				down_read(&task->mm->mmap_sem);
 
-				if(pte_present(*pte)){
-					present_pages++;		
-				}
-				else{
+				if(!pte_none(*pte)){
+					if(pte_present(*pte)){
+						present_pages++;		
+					}
+					else{
 					swapped_pages++;
+					}
 				}
 
 				up_read(&task->mm->mmap_sem);
 			}
 			vma = vma->vm_next;
+		//	printk("vm_next addy: %d",&vma); 
 		}
-		printk(KERN_WARNING "PRESENT: %d SWAPPED: %d", present_pages, swapped_pages);
+		
+		printk("PRESENT: %d SWAPPED: %d", present_pages, swapped_pages);
 	return 0;
 }
 
