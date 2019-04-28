@@ -1,0 +1,161 @@
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/moduleparam.h>
+#include <linux/types.h>
+#include <linux/sched.h>
+#include <linux/mm_types.h>
+
+#include <linux/kernel_stat.h>
+#include <linux/mm.h>
+#include <linux/sched/mm.h>
+#include <linux/sched/signal.h>
+#include <asm/pgtable.h>
+#include <asm/mmu_context.h>
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
+ 
+unsigned long timer_interval_ns = 5e9;
+unsigned long timer_interval_bonus = 10e9;
+static struct hrtimer hr_timer;
+
+/*
+ * takes in int as a parameter for the module
+ * e.g. "insmod ./proj3_pt1.ko mypid=99"
+ */
+static int  mypid = 0;
+module_param(mypid,int, 0);
+
+struct task_struct *task;
+//struct mm_struct *mm;
+struct vm_area_struct *vma;
+
+/*
+ * 5-layer page table goes PGD->P4D->PUD->PMD->PTE
+ */
+pgd_t *pgd;
+p4d_t *p4d;
+pud_t *pud;
+pmd_t *pmd;
+pte_t *pte;
+
+int _i;
+int accessedCount = 0;
+int accessedCountBonus = 0;
+int percent = 0;
+int totalWSS;
+	static int proj3_pt2_init(void){
+
+		printk("pid= %d", mypid);//prints out the first line of the module and shows the given PID which was the parameter
+
+		for_each_process(task){//looks for processes with task struct and matching PID
+			if(task->pid == mypid){
+				goto found;//so we found it, now we gotta find the pages
+			}
+		}
+
+		found:
+			vma = task->mm->mmap;
+
+			pte_mkold(*pte); // makes the pages not accessed...0
+
+			while(vma){
+				for(_i = vma->vm_start; _i < vma->vm_end;_i+= PAGE_SIZE){
+					pgd = pgd_offset(task->mm, _i);
+					p4d = p4d_offset(pgd, _i);
+					pud = pud_offset(p4d, _i);
+					pmd = pmd_offset(pud, _i);
+					pte = pte_offset_map(pmd, _i);
+
+					down_read(&task->mm->mmap_sem);
+
+					if(pte_young(*pte)){
+						accessedCount++;
+					}
+
+					up_read(&task->mm->mmap_sem);
+				}
+				vma = vma->vm_next;
+			}
+
+		printk("PID: %d WSS: %d", mypid, accessedCount);
+		accessedCount = 0;
+		return 0;
+	}
+	
+	static int proj3_pt2_bonus (void){
+		printk("10 secs");
+ 		for_each_process(task){
+			vma = task->mm->mmap;
+
+                        pte_mkold(*pte); // makes the pages not accessed...0
+
+                        while(vma){
+                                for(_i = vma->vm_start; _i < vma->vm_end;_i+= PAGE_SIZE){
+                                        pgd = pgd_offset(task->mm, _i);
+                                        p4d = p4d_offset(pgd, _i);
+                                        pud = pud_offset(p4d, _i);
+                                        pmd = pmd_offset(pud, _i);
+                                        pte = pte_offset_map(pmd, _i);
+
+                                        down_read(&task->mm->mmap_sem);
+
+                                        if(pte_young(*pte)){
+                                                accessedCountBonus++;
+                                        }
+
+                                        up_read(&task->mm->mmap_sem);
+                                }
+                                vma = vma->vm_next;
+                        }
+		}
+		totalWSS = accessedCountBonus *4;
+		printk("Total WSS: %d", totalWSS); 
+                percent = (accessedCountBonus/totalWSS);
+		if(percent > 0.9){
+			printk("KERNEL ALERT!");
+		}
+		else {
+			printk("No thrashing");
+			percent = 0;
+			accessedCountBonus = 0;
+			totalWSS = 0;
+		}
+		return 0;
+	}
+
+
+enum hrtimer_restart timer_callback( struct hrtimer *timer_for_restart ){
+    ktime_t currtime , interval;
+    currtime  = ktime_get();
+    interval = ktime_set(0,timer_interval_ns);
+    hrtimer_forward(timer_for_restart, currtime , interval);
+    proj3_pt2_init();
+
+    currtime  = ktime_get();
+    interval = ktime_set(0,timer_interval_bonus);
+    hrtimer_forward(timer_for_restart, currtime , interval);
+    proj3_pt2_bonus();
+
+    return HRTIMER_RESTART;
+}
+
+static int timer_init(void) {
+    ktime_t ktime;
+    ktime = ktime_set( 0, timer_interval_ns );
+    hrtimer_init( &hr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL );
+    hr_timer.function = &timer_callback;
+    hrtimer_start( &hr_timer, ktime, HRTIMER_MODE_REL );
+    return 0;
+}
+
+static void timer_exit(void) {
+    int ret;
+    ret = hrtimer_cancel( &hr_timer );
+    if (ret) printk("Timer was still in use!\n");
+    printk("HR Timer removed\n");
+    printk("Goodbye");
+}
+
+MODULE_LICENSE("GPL");
+module_init(timer_init);
+module_exit(timer_exit);
